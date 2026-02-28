@@ -2,8 +2,6 @@ import os
 import json
 from mistralai import Mistral
 
-
-
 # ==========================
 # 1️⃣ Charger les données JSON
 # ==========================
@@ -61,7 +59,7 @@ Do NOT invent values.
 # 3️⃣ Connexion à Mistral
 # ==========================
 
-client = Mistral(api_key="HtxRNKpTEWLLeItdYokmbvBMP6cmx8Kd")
+client = Mistral(api_key=os.getenv("API_KEY"))
 
 # ==========================
 # 4️⃣ Appel au modèle
