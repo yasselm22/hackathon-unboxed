@@ -28,7 +28,6 @@ with open("nodule_result.json", "r", encoding="utf-8") as f:
 
 prompt = f"""
 You are a senior thoracic radiologist.
-
 Here are the structured CT findings:
 
 Patient ID: {nodule_data['patient_id']}
@@ -50,6 +49,7 @@ Write a structured radiology report with the following sections:
 - Findings
 - Comparison
 - Impression
+
 
 Use professional medical language.
 Do NOT invent values.
