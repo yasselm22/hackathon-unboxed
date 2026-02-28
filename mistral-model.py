@@ -2,19 +2,13 @@ import os
 import json
 from mistralai import Mistral
 
-client = Mistral(api_key="HtxRNKpTEWLLeItdYokmbvBMP6cmx8Kd")
 
-response = client.chat.complete(
-    model="mistral-small-latest",
-    messages=[{"role": "user", "content": "Hello!"}]
-)
-print(response.choices[0].message.content)
 
 # ==========================
 # 1️⃣ Charger les données JSON
 # ==========================
 
-with open("nodule_results.json", "r", encoding="utf-8") as f:
+with open("nodule_result.json", "r", encoding="utf-8") as f:
     nodule_data = json.load(f)
 
 # ==========================
@@ -67,14 +61,14 @@ Do NOT invent values.
 # 3️⃣ Connexion à Mistral
 # ==========================
 
-client = Mistral(api_key=os.environ["MISTRAL_API_KEY"])
+client = Mistral(api_key="HtxRNKpTEWLLeItdYokmbvBMP6cmx8Kd")
 
 # ==========================
 # 4️⃣ Appel au modèle
 # ==========================
 
 response = client.chat.complete(
-    model="mistral-large-latest",  # ou mistral-medium selon votre plan
+    model="mistral-small-latest",  # ou mistral-medium selon votre plan
     messages=[
         {"role": "system", "content": "You are a precise and factual medical report generator."},
         {"role": "user", "content": prompt}
