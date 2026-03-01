@@ -1,1 +1,8 @@
 *.dcm
+.env
+*.xlsx
+results/
+reports/
+reports.json
+downloads/
+.venv
