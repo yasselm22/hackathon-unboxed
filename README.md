@@ -1,6 +1,6 @@
 # hackathon-unboxed
 
-Hackathon project : development of Mistral AI Agent for medical use in oncology services.
+UNBOXED Medical AI Agentic Hackathon: development of Mistral AI Agent for medical use in oncology services.
 
 ## Project description
 
@@ -30,3 +30,12 @@ As part of future features that we did not have time to fully implement :
 
 - Allowing the radiologist to append and modify the generated reports so that the agent betters itself in later calls
 - Implementing a RAG pipeline to the previous reports and current ones to suggest the next steps in the medical process
+
+## Authors
+
+EL HOUMA Mohamed
+EL MOUKRI Yassmine
+EL OUARDIGHI Nour
+IQDARI Ikram
+INSA Lyon
+01/03/2026
