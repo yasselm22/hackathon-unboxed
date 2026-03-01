@@ -19,6 +19,10 @@ from pathlib import Path
 from datetime import datetime
 from typing import Any
 
+import os
+import dotenv
+dotenv.load_dotenv()
+
 import httpx
 
 from orthanc import ORTHANC_URL, AUTH
@@ -36,14 +40,14 @@ except ImportError:
     MISTRAL_AVAILABLE = False
 
 # ── Config ────────────────────────────────────────────────────────────
-MISTRAL_API_KEY = "HtxRNKpTEWLLeItdYokmbvBMP6cmx8Kd"
+MISTRAL_API_KEY = os.getenv("API_KEY")
 MISTRAL_MODEL   = "mistral-small-latest"
 
 # ── Directories ───────────────────────────────────────────────────────
 BASE_DIR      = Path(__file__).parent.parent
 DOWNLOADS_DIR = BASE_DIR / "downloads"
 REPORTS_DIR   = BASE_DIR / "reports"
-HISTORY_FILE  = BASE_DIR / "reports.json" # <--- AJOUT : Chemin vers le fichier JSON généré
+HISTORY_FILE  = BASE_DIR / "reports.json" 
 
 # ── In-memory job tracker  ────────────────────────────────────────────
 JOBS: dict[str, dict] = {}
