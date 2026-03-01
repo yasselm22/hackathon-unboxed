@@ -17,6 +17,11 @@ import pipeline
 
 app = FastAPI(title="Radiology Report Viewer", version="1.0.0")
 
+# ── Prepare directories ──────────────────────────────────────────────
+FRONTEND_DIR = Path(__file__).parent.parent / "frontend"
+REPORTS_DIR = Path(__file__).parent.parent / "reports"  # Changed: now points to project root
+REPORTS_DIR.mkdir(parents=True, exist_ok=True)
+
 # ── CORS (needed if you serve the frontend from a different origin) ───
 app.add_middleware(
     CORSMiddleware,
@@ -25,9 +30,9 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# ── Serve the frontend static files ──────────────────────────────────
-FRONTEND_DIR = Path(__file__).parent.parent / "frontend"
+# ── Mount static directories FIRST (before route definitions) ─────────
 app.mount("/static", StaticFiles(directory=str(FRONTEND_DIR)), name="static")
+app.mount("/reports", StaticFiles(directory=str(REPORTS_DIR)), name="reports")
 
 
 # ─────────────────────────────────────────────────────────────────────
@@ -112,6 +117,16 @@ async def analysis_status(job_id: str):
 @app.get("/api/report/{study_uid}")
 async def get_report(study_uid: str):
     """Return the generated radiology report for a study."""
+    # Check if HTML report file exists
+    report_path = REPORTS_DIR / f"{study_uid}.html"
+    if report_path.exists():
+        return FileResponse(
+            path=str(report_path),
+            media_type="text/html",
+            filename=f"report_{study_uid}.html"
+        )
+    
+    # Fallback to old method if file doesn't exist
     result = reports.get_report_content(study_uid)
     if result is None:
         raise HTTPException(

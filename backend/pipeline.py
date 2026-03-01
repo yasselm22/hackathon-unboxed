@@ -35,6 +35,16 @@ try:
 except ImportError:
     MISTRAL_AVAILABLE = False
 
+try:
+    import SimpleITK as sitk
+    import matplotlib
+    matplotlib.use('Agg')  # Non-interactive backend
+    import matplotlib.pyplot as plt
+    import numpy as np
+    VISUALIZATION_AVAILABLE = True
+except ImportError:
+    VISUALIZATION_AVAILABLE = False
+
 # ── Config ────────────────────────────────────────────────────────────
 MISTRAL_API_KEY = "HtxRNKpTEWLLeItdYokmbvBMP6cmx8Kd"
 MISTRAL_MODEL   = "mistral-small-latest"
@@ -238,6 +248,88 @@ def _find_dcm_folder(root: Path) -> Path:
     return best_dir
 
 
+def _generate_seg_visualizations(seg_dcm_path: Path) -> list[str]:
+    """
+    Generate PNG visualizations from a DICOM SEG file.
+    Returns a list of generated image filenames (relative to REPORTS_DIR).
+    """
+    if not VISUALIZATION_AVAILABLE:
+        print("Warning: SimpleITK or matplotlib not available. Skipping visualizations.")
+        return []
+
+    try:
+        # Read the DICOM SEG file
+        print(f"Reading DICOM SEG from: {seg_dcm_path}")
+        seg = sitk.ReadImage(str(seg_dcm_path))
+        segment_array = sitk.GetArrayFromImage(seg)
+        
+        print(f"Segment array shape: {segment_array.shape}")
+        print(f"Segment array dtype: {segment_array.dtype}")
+        print(f"Segment array min/max: {segment_array.min()} / {segment_array.max()}")
+        print(f"Unique values in segment: {np.unique(segment_array)}")
+        
+        # Generate a unique timestamp for the images
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        image_files = []
+
+        # DICOM SEG contains binary masks (0 or segment_id)
+        # We need to ensure we're displaying the mask correctly
+        # Convert to binary if needed
+        if segment_array.max() <= 1:
+            # Already binary, multiply by 255 for visibility
+            segment_array = (segment_array * 255).astype(np.uint8)
+        
+        # Maximum intensity projection (MIP) view
+        mip_view = segment_array.max(axis=0)
+        print(f"MIP view shape: {mip_view.shape}, max value: {mip_view.max()}")
+        
+        if mip_view.max() > 0:  # Only save if there's something to display
+            fig, ax = plt.subplots(figsize=(10, 8))
+            im = ax.imshow(mip_view, cmap='hot', interpolation='nearest', vmin=0, vmax=255)
+            ax.set_title("Segmentation - Maximum Intensity Projection", fontsize=14)
+            ax.axis('off')
+            plt.colorbar(im, ax=ax, fraction=0.046, pad=0.04, label='Segment Mask')
+            
+            filename = f"seg_mip_{timestamp}.png"
+            filepath = REPORTS_DIR / filename
+            plt.savefig(filepath, dpi=150, bbox_inches='tight', facecolor='white')
+            plt.close(fig)
+            image_files.append(filename)
+            print(f"Saved MIP image: {filename}")
+
+        # Middle axial slice
+        num_slices = segment_array.shape[0]
+        if num_slices > 0:
+            middle_slice = segment_array[num_slices // 2, :, :]
+            print(f"Middle slice max: {middle_slice.max()}")
+            
+            if middle_slice.max() > 0:
+                fig, ax = plt.subplots(figsize=(10, 8))
+                im = ax.imshow(middle_slice, cmap='hot', interpolation='nearest', vmin=0, vmax=255)
+                ax.set_title(f"Segmentation - Axial Slice {num_slices // 2}/{num_slices}", fontsize=14)
+                ax.axis('off')
+                plt.colorbar(im, ax=ax, fraction=0.046, pad=0.04, label='Segment Mask')
+                
+                filename = f"seg_axial_{timestamp}.png"
+                filepath = REPORTS_DIR / filename
+                plt.savefig(filepath, dpi=150, bbox_inches='tight', facecolor='white')
+                plt.close(fig)
+                image_files.append(filename)
+                print(f"Saved axial slice image: {filename}")
+
+        if len(image_files) == 0:
+            print("Warning: No images generated. Segment array might be all zeros.")
+            
+        print(f"Generated {len(image_files)} visualization(s): {image_files}")
+        return image_files
+
+    except Exception as e:
+        print(f"Error generating visualizations: {e}")
+        import traceback
+        traceback.print_exc()
+        return []
+
+
 # ─────────────────────────────────────────────────────────────────────
 # Step 4 : extract_seg → parse into structured dict
 # ─────────────────────────────────────────────────────────────────────
@@ -246,18 +338,34 @@ def _run_seg_and_parse(ct_dir: Path) -> dict:
     """
     Run extract_seg then parse the text output into a structured dict.
     Returns a dict like:
-      {"Accession Number": "...", "Summary": {...}, ...}
+      {"Accession Number": "...", "Summary": {...}, ..., "_images": [...]}
     """
     if not SEG_AVAILABLE:
         return {"_error": "Module dcm_seg_nodules non installé"}
 
+    print(f"Running extract_seg on: {ct_dir}")
+    print(f"Output dir: {REPORTS_DIR}")
     seg_result = extract_seg(str(ct_dir), output_dir=str(REPORTS_DIR))
+    
+    print(f"extract_seg result type: {type(seg_result)}")
+    print(f"extract_seg result: {seg_result}")
 
     # extract_seg returns a tuple (seg_path, text_content) or just a string
     if isinstance(seg_result, tuple):
+        seg_path = seg_result[0]  # Path to the DICOM SEG file
         txt = seg_result[-1]
+        print(f"Extracted seg_path: {seg_path}")
+        print(f"Extracted text length: {len(txt)}")
     else:
         txt = str(seg_result)
+        seg_path = None
+        print("extract_seg did not return a tuple, no seg_path available")
+        
+        # Try to find the DICOM SEG file manually in REPORTS_DIR
+        seg_files = list(REPORTS_DIR.glob("*.dcm"))
+        if seg_files:
+            seg_path = str(seg_files[0])  # Take the first one
+            print(f"Found DICOM SEG file manually: {seg_path}")
 
     # Parse the text into key-value pairs
     lines = txt.split("\n")
@@ -282,6 +390,21 @@ def _run_seg_and_parse(ct_dir: Path) -> dict:
 
     # Keep the raw text too for debugging
     data["_raw_seg_output"] = txt
+
+    # Generate visualization images from DICOM SEG
+    image_files = []
+    if seg_path:
+        seg_path_obj = Path(seg_path)
+        print(f"Checking if seg_path exists: {seg_path_obj} -> {seg_path_obj.exists()}")
+        if seg_path_obj.exists():
+            print(f"File size: {seg_path_obj.stat().st_size} bytes")
+            image_files = _generate_seg_visualizations(seg_path_obj)
+        else:
+            print(f"WARNING: Seg path does not exist: {seg_path}")
+    else:
+        print("WARNING: No seg_path available for visualization")
+        
+    data["_images"] = image_files
 
     return data
 
@@ -507,6 +630,9 @@ def _generate_html_report(
     <table>
       {seg_rows}
     </table>
+    
+    <!-- ── Visualization Images ───────────────────── -->
+    {_generate_images_html(seg_data)}
   </div>
 
   <!-- ── LLM Report ──────────────────────────────── -->
@@ -608,3 +734,27 @@ def _inline_format(text: str) -> str:
     text = re.sub(r'\*\*(.+?)\*\*', r'<strong>\1</strong>', text)
     text = re.sub(r'\*(.+?)\*', r'<em>\1</em>', text)
     return text
+
+
+def _generate_images_html(seg_data: dict) -> str:
+    """Generate HTML for displaying segmentation images."""
+    images_list = seg_data.get("_images", [])
+    
+    if not images_list:
+        return '<p style="color:#9ca3af;font-style:italic;margin-top:10px;">Aucune image de visualisation générée.</p>'
+    
+    html = '<div style="margin-top:20px;"><h4 style="color:#1e40af;margin-bottom:10px;">Visualisations de la segmentation</h4>'
+    html += '<div style="display:flex;flex-wrap:wrap;gap:15px;">'
+    
+    for img_name in images_list:
+        img_url = f"/reports/{img_name}"
+        html += f'''
+        <div style="border:1px solid #e5e7eb;border-radius:8px;padding:8px;background:#f9fafb;">
+            <a href="{img_url}" target="_blank">
+                <img src="{img_url}" alt="Segmentation" style="max-width:400px;max-height:400px;display:block;border-radius:4px;">
+            </a>
+        </div>
+        '''
+    
+    html += '</div></div>'
+    return html
