@@ -80,6 +80,7 @@ def get_job(job_id: str) -> dict | None:
 
 def _run(job_id: str, study_orthanc_id: str, study_uid: str):
     try:
+        print(f"[{job_id}] Pipeline started for StudyInstanceUID={study_uid} (Orthanc ID={study_orthanc_id})")
         # Step 1 — Metadata
         _update(job_id, "running", "Récupération des métadonnées de l'examen…")
         study_info = _fetch_study_info(study_orthanc_id)
@@ -287,6 +288,8 @@ def _generate_llm_report(study_info: dict, seg_data: dict) -> str:
     description  = tags.get("StudyDescription", "N/A")
     acc_number   = tags.get("AccessionNumber", "N/A")
 
+
+
     # Build a readable summary of SEG findings
     seg_summary_parts = []
     for k, v in seg_data.items():
@@ -302,23 +305,27 @@ def _generate_llm_report(study_info: dict, seg_data: dict) -> str:
 
     prompt = f"""You are a senior thoracic radiologist.
 
-Here are the structured CT findings extracted by an automated nodule segmentation system:
-
+    You get two JSON files as input: 
+- the first one contains the structured CT findings extracted by an automated nodule segmentation system. The content of the file is the following:
 Patient ID: {patient_id}
 Patient Name: {patient_name}
 Exam Date: {study_date}
 Study Description: {description}
 Accession Number: {acc_number}
-
 Segmentation Findings:
 {seg_text}
 
-Based on these findings, write a structured radiology report with the following sections:
+- the second file contains the previous radiology reports. 
+for each patient, we have a list of series identified by their accession_id and described in the summary field. 
+
+Based on the first JSON file findings, write a structured radiology report with the following sections:
+- Reason for the study
 - Indication
 - Technique
-- Findings
+- Findings : 
 - Impression
-- Recommendation
+
+You should then compare the current findings with the previous reports of the patient, to evoque previously identified lesions, and conclude on the evolution of the lesions (stable, progression, response to treatment, etc.) according to RECIST criteria.
 
 Rules:
 - Use professional medical language.

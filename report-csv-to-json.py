@@ -46,11 +46,13 @@ def convert_csv_to_json(file):
                     serie_type = row1.get('Série avec les masques de DICOM SEG\n')
                     access_id =  row1.get('AccessionNumber')
                     description = row1.get('Clinical information data (Pseudo reports)')
+                    date = row1.get('Date')
 
                     series.append({
                         'serie_type' : serie_type,
                         'accession_id' : access_id,
-                        'summary' : description
+                        'summary' : description,
+                        'date' : date
                     })
                 patient['series'] = series
             
@@ -62,6 +64,6 @@ def convert_csv_to_json(file):
     
 
 if __name__ == "__main__":
-    file = "/mnt/c/Users/elmou/hackathon-unboxed/protected-clinical-data.xlsx"
+    file = "C:\\Users\\Admin\\Desktop\\Unboxed\\brouillon\\protected-clinical-data.xlsx"
     convert_csv_to_json(file)
     
