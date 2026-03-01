@@ -1,2 +1,9 @@
 .venv
 *.xlsx
+*.dcm
+.env
+results/
+reports/
+reports.json
+downloads/
+.env

@@ -1,0 +1,6 @@
+dcm_seg_nodules==1.0.0
+fastapi==0.135.0
+httpx==0.28.1
+mistralai==1.12.4
+pandas==3.0.1
+python-dotenv==1.2.1

@@ -73,6 +73,6 @@ def convert_csv_to_json(file):
     
 
 if __name__ == "__main__":
-    file = "C:\\Users\\Admin\\Desktop\\Unboxed\\brouillon\\protected-clinical-data.xlsx"
-    convert_csv_to_json(file)
+    EXCEL_FILE = os.getenv("EXCEL_PATH")
+    convert_csv_to_json(EXCEL_FILE)
     

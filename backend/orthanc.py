@@ -9,12 +9,16 @@ Connection priority:
 
 import httpx
 from typing import Any
+import dotenv
+import os
+
+dotenv.load_dotenv()
 
 # ── Orthanc server settings ───────────────────────────────────────────
-ORTHANC_URL_INTERNAL = "http://10.0.1.215:8042"
-ORTHANC_URL_PUBLIC   = "https://orthanc.unboxed-2026.ovh"
-ORTHANC_USER         = "unboxed"
-ORTHANC_PASS         = "unboxed2026"
+ORTHANC_URL_INTERNAL = os.getenv("ORTHANC_URL_INTERNAL")
+ORTHANC_URL_PUBLIC   = os.getenv("ORTHANC_URL_PUBLIC")
+ORTHANC_USER         = os.getenv("ORTHANC_USER")
+ORTHANC_PASS         = os.getenv("ORTHANC_PASSWORD")
 # ─────────────────────────────────────────────────────────────────────
 
 AUTH    = (ORTHANC_USER, ORTHANC_PASS)
