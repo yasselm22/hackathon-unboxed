@@ -34,7 +34,6 @@ def convert_csv_to_json(file):
     for i, row in df.iterrows():
         patient_id = row.get('PatientID')
 
-
         if (patient_id != None) and (patient_id not in patients) :
             patients.append(patient_id)
             patient = {'patient_ID' : patient_id, 'series' : []}
@@ -46,13 +45,23 @@ def convert_csv_to_json(file):
                     serie_type = row1.get('Série avec les masques de DICOM SEG\n')
                     access_id =  row1.get('AccessionNumber')
                     description = row1.get('Clinical information data (Pseudo reports)')
-                    date = row1.get('Date')
+                    raw_date = row1.get('Date')
+                    
+                    # Conversion de la date en string (YYYY-MM-DD)
+                    date_str = None
+                    if pd.notnull(raw_date):
+                        try:
+                            date_str = pd.to_datetime(raw_date).strftime('%Y-%m-%d')
+                        except:
+                            date_str = str(raw_date) # Fallback si le format est étrange
+
+                    print(date_str)
 
                     series.append({
                         'serie_type' : serie_type,
                         'accession_id' : access_id,
                         'summary' : description,
-                        'date' : date
+                        'date' : date_str
                     })
                 patient['series'] = series
             

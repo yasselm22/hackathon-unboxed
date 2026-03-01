@@ -43,6 +43,7 @@ MISTRAL_MODEL   = "mistral-small-latest"
 BASE_DIR      = Path(__file__).parent.parent
 DOWNLOADS_DIR = BASE_DIR / "downloads"
 REPORTS_DIR   = BASE_DIR / "reports"
+HISTORY_FILE  = BASE_DIR / "reports.json" # <--- AJOUT : Chemin vers le fichier JSON généré
 
 # ── In-memory job tracker  ────────────────────────────────────────────
 JOBS: dict[str, dict] = {}
@@ -75,6 +76,43 @@ def get_job(job_id: str) -> dict | None:
 
 
 # ─────────────────────────────────────────────────────────────────────
+# Helper : Get History
+# ─────────────────────────────────────────────────────────────────────
+def _get_patient_history(patient_id: str) -> str:
+    """
+    Lit reports.json et retourne l'historique du patient sous forme de texte.
+    """
+    if not HISTORY_FILE.exists():
+        return "No previous history file found."
+
+    try:
+        with open(HISTORY_FILE, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        
+        patients = data.get("patients", {})
+        patient_data = patients.get(patient_id)
+
+        if not patient_data:
+            return "No previous records found for this patient."
+
+        series = patient_data.get("series", [])
+        if not series:
+            return "Patient found but no prior series recorded."
+
+        # On construit un texte lisible pour le LLM
+        history_txt = []
+        for s in series:
+            date = s.get("date", "Unknown Date")
+            summary = s.get("summary", "No details")
+            accession = s.get("accession_id", "N/A")
+            history_txt.append(f"- Date: {date} (Acc: {accession})\n  Report: {summary}")
+        
+        return "\n".join(history_txt)
+
+    except Exception as e:
+        return f"Error reading history: {str(e)}"
+
+# ─────────────────────────────────────────────────────────────────────
 # Main pipeline runner
 # ─────────────────────────────────────────────────────────────────────
 
@@ -84,6 +122,14 @@ def _run(job_id: str, study_orthanc_id: str, study_uid: str):
         # Step 1 — Metadata
         _update(job_id, "running", "Récupération des métadonnées de l'examen…")
         study_info = _fetch_study_info(study_orthanc_id)
+        
+        # --- AJOUT : Récupération de l'ID patient pour l'historique ---
+        patient_tags = study_info.get("PatientMainDicomTags", {})
+        patient_id = patient_tags.get("PatientID", "")
+        
+        # Récupération de l'historique
+        patient_history = _get_patient_history(patient_id) 
+        # -------------------------------------------------------------
 
         # Step 2 — Download
         _update(job_id, "running", "Téléchargement de l'archive DICOM depuis Orthanc…")
@@ -103,7 +149,10 @@ def _run(job_id: str, study_orthanc_id: str, study_uid: str):
 
         # Step 6 — LLM report generation
         _update(job_id, "running", "Génération du rapport via Mistral LLM…")
-        llm_report = _generate_llm_report(study_info, seg_data)
+        
+        # --- MODIFICATION : On passe l'historique à la fonction ---
+        llm_report = _generate_llm_report(study_info, seg_data, patient_history)
+        # ----------------------------------------------------------
 
         # Step 7 — Final HTML
         _update(job_id, "running", "Génération du rapport HTML final…")
@@ -267,7 +316,8 @@ def _save_seg_json(study_uid: str, study_info: dict, seg_data: dict) -> Path:
 # Step 6 : send to Mistral LLM → get radiology report text
 # ─────────────────────────────────────────────────────────────────────
 
-def _generate_llm_report(study_info: dict, seg_data: dict) -> str:
+# --- MODIFICATION DE LA SIGNATURE : ajout de previous_history_text ---
+def _generate_llm_report(study_info: dict, seg_data: dict, previous_history_text: str) -> str:
     """
     Build a prompt from the structured seg data and Orthanc metadata,
     send it to Mistral, and return the generated report text.
@@ -289,7 +339,6 @@ def _generate_llm_report(study_info: dict, seg_data: dict) -> str:
     acc_number   = tags.get("AccessionNumber", "N/A")
 
 
-
     # Build a readable summary of SEG findings
     seg_summary_parts = []
     for k, v in seg_data.items():
@@ -303,35 +352,39 @@ def _generate_llm_report(study_info: dict, seg_data: dict) -> str:
             seg_summary_parts.append(f"- {k}: {v}")
     seg_text = "\n".join(seg_summary_parts) if seg_summary_parts else "No structured findings available."
 
+    # --- MODIFICATION DU PROMPT ---
     prompt = f"""You are a senior thoracic radiologist.
 
-    You get two JSON files as input: 
-- the first one contains the structured CT findings extracted by an automated nodule segmentation system. The content of the file is the following:
+    You get three inputs: 
+1. Validated automated CT findings (nodules, volumes).
+2. The patient's clinical metadata.
+3. The patient's previous radiology history.
+
+=== CURRENT EXAM DATA ===
 Patient ID: {patient_id}
-Patient Name: {patient_name}
 Exam Date: {study_date}
 Study Description: {description}
 Accession Number: {acc_number}
-Segmentation Findings:
+
+=== AUTOMATED FINDINGS ===
 {seg_text}
 
-- the second file contains the previous radiology reports. 
-for each patient, we have a list of series identified by their accession_id and described in the summary field. 
+=== PATIENT HISTORY (Previous Reports) ===
+{previous_history_text}
 
-Based on the first JSON file findings, write a structured radiology report with the following sections:
-- Reason for the study
-- Indication
-- Technique
-- Findings : 
-- Impression
-
-You should then compare the current findings with the previous reports of the patient, to evoque previously identified lesions, and conclude on the evolution of the lesions (stable, progression, response to treatment, etc.) according to RECIST criteria.
+=== INSTRUCTIONS ===
+Based on the current findings and history, write a structured radiology report:
+1. **Clinical Indication**: Briefly mention context if available.
+2. **Technique**: Standard CT protocol.
+3. **Findings**: Describe the nodules/lesions found in the automated findings.
+4. **Comparison**: Compare explicitly with the 'Patient History' provided above if dates/lesions match.
+   - If a previous report mentions a nodule, check if the current findings show stability, progression, or regression (RECIST).
+   - If no history matches, state "No prior comparison available".
+5. **Impression**: Final conclusion and recommendations.
 
 Rules:
-- Use professional medical language.
-- Do NOT invent or hallucinate values — only use the data provided.
-- If a finding is uncertain, state it clearly.
-- Be concise but thorough.
+- be concise.
+- Comparison with history is CRITICAL.
 - Write in English.
 """
 
